@@ -2,6 +2,8 @@
 
 A real-time voice conversation widget that lets website visitors talk to an AI assistant. Drop a single `<script>` tag into any webpage and your site gets a floating voice chat widget — no build tools required.
 
+Supports two modes: **Standard** (Whisper STT + GPT + TTS pipeline) and **Realtime** (OpenAI Realtime API with server-side VAD for lower latency).
+
 **CDN:**
 ```html
 <script src="https://cdn.jsdelivr.net/gh/importsource/ai-voice-widget@main/ai-widget.js"></script>
@@ -9,26 +11,38 @@ A real-time voice conversation widget that lets website visitors talk to an AI a
 
 ## Overview
 
-**Architecture:**
+**Architecture — Standard Mode:**
 
 ```
-Browser (ai-widget.js)          Server (index-openai.js)
-  Mic → VAD → audio chunks  ──→  WebSocket (ws://...)
+Browser (ai-widget.js)          Server
+  Mic → VAD → audio chunks  ──→  WebSocket (ws://...?mode=standard)
                                     ↓
                                   Whisper STT → text
                                     ↓
-                                  GPT-4o-mini → response text
+                                  GPT-4o → response text
                                     ↓
                                   OpenAI TTS → audio
   Speaker ← audio chunks    ←──  WebSocket
 ```
 
+**Architecture — Realtime Mode:**
+
+```
+Browser (ai-widget.js)          Server
+  Mic → audio stream         ──→  WebSocket (ws://...?mode=realtime)
+                                    ↓
+                                  OpenAI Realtime API
+                                  (server VAD, streaming speech-to-speech)
+                                    ↓
+  Speaker ← audio stream    ←──  WebSocket
+```
+
 **Tech Stack:**
 - Frontend: Plain JS — no framework, no build tools, one file
 - Backend: Node.js + WebSocket
-- AI: OpenAI (Whisper STT, GPT-4o-mini LLM, TTS-1 speech)
+- AI: OpenAI (Standard: Whisper STT + GPT-4o + TTS-1 | Realtime: OpenAI Realtime API)
 
-**Key design:** All AI prompts live on the server as named presets. The client only sends a preset name (e.g. `receptionist`), never the actual prompt. This keeps your instructions secure and prevents prompt injection.
+**Key design:** All AI prompts live on the server as named presets loaded from external JSON config files. The client only sends a preset name (e.g. `receptionist`), never the actual prompt. This keeps your instructions secure and prevents prompt injection.
 
 ---
 
@@ -39,13 +53,26 @@ voice-ai-js-starter-main/
 ├── ai-widget.js              ← Drop-in widget library (or use CDN)
 ├── README.md                 ← This file
 ├── server/
-│   ├── index-openai.js       ← WebSocket server with preset definitions
-│   ├── .env                  ← API keys
-│   ├── lib/                  ← Server internals (assistant, STT, TTS, etc.)
+│   ├── index-openai.js       ← Standard mode server (STT → LLM → TTS pipeline)
+│   ├── index-realtime.js     ← Dual-mode server (standard + realtime)
+│   ├── .env                  ← API keys (gitignored)
+│   ├── presets/              ← Preset JSON config files (gitignored)
+│   │   ├── receptionist.json
+│   │   ├── sales.json
+│   │   ├── support.json
+│   │   └── .gitkeep
+│   ├── lib/
+│   │   ├── presets.js        ← Preset loader (reads presets/*.json at startup)
+│   │   ├── assistant.js      ← Standard mode assistant
+│   │   ├── realtime-relay.js ← OpenAI Realtime API relay
+│   │   ├── conversation.js
+│   │   ├── stt.js
+│   │   ├── tts.js
+│   │   └── audio.js
 │   └── package.json
 └── web/
     ├── ai-widget.js           ← Copy of widget for demo
-    └── index.html             ← Demo page with preset selector
+    └── index.html             ← Demo page with preset + mode selector
 ```
 
 ---
@@ -71,26 +98,15 @@ That's the only key you need. Get one at https://platform.openai.com/api-keys
 
 ### Define Presets
 
-Edit `server/index-openai.js` to add or modify presets:
+Presets are stored as individual JSON files in `server/presets/`. Each file defines one preset:
 
-```js
-const PRESETS = {
-  receptionist: {
-    instructions: 'You are a friendly AI receptionist...',
-    openingMessage: 'Hello! Welcome. How can I help you today?',
-    voiceName: 'nova',
-  },
-  sales: {
-    instructions: 'You are a persuasive AI sales assistant...',
-    openingMessage: 'Hi there! Looking for something special today?',
-    voiceName: 'shimmer',
-  },
-  support: {
-    instructions: 'You are a patient AI tech support assistant...',
-    openingMessage: 'Hi! I\'m here to help with any technical issues.',
-    voiceName: 'echo',
-  },
-};
+`server/presets/receptionist.json`:
+```json
+{
+  "instructions": "You are a friendly AI receptionist...",
+  "openingMessage": "Hello! Welcome. How can I help you today?",
+  "voiceName": "nova"
+}
 ```
 
 Each preset defines:
@@ -101,21 +117,47 @@ Each preset defines:
 | `openingMessage` | What the bot says when a user connects |
 | `voiceName` | TTS voice: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` |
 
+The preset files are gitignored so your prompt instructions stay private.
+
 ### Start
+
+**Standard mode only** (STT + LLM + TTS pipeline):
 
 ```bash
 node index-openai.js
 ```
 
+**Dual mode** (supports both standard and realtime via `?mode=` query param):
+
+```bash
+node index-realtime.js
+```
+
 Output:
 ```
+Loaded 3 preset(s): receptionist, sales, support
 WebSocket server running on ws://localhost:8000
-Available presets: receptionist, sales, support
+Supports both standard and realtime modes (via ?mode=standard|realtime)
 ```
 
 ---
 
-## 2. Demo Page
+## 2. Standard vs Realtime Mode
+
+| | Standard | Realtime |
+|---|---|---|
+| **Server** | `index-openai.js` or `index-realtime.js` | `index-realtime.js` only |
+| **Pipeline** | Whisper STT → GPT-4o → TTS-1 | OpenAI Realtime API (speech-to-speech) |
+| **VAD** | Client-side (browser) | Server-side (OpenAI) |
+| **Latency** | Higher (sequential API calls) | Lower (streaming speech-to-speech) |
+| **Turn detection** | Client sends EOS after silence | Server VAD handles automatically |
+| **Client param** | `mode: 'standard'` (default) | `mode: 'realtime'` |
+
+Both modes use the same presets and the same widget — the only difference is the `mode` option.
+
+---
+
+## 3. Demo Page
 
 ```bash
 cd voice-ai-js-starter-main/web
@@ -124,11 +166,11 @@ python3 -m http.server 3000
 
 Open http://localhost:3000/index.html
 
-The demo page has a preset dropdown — switch between `receptionist`, `sales`, and `support` to test different AI personalities.
+The demo page has dropdowns for both **preset** and **mode** — switch between presets and toggle standard/realtime to compare latency and behavior.
 
 ---
 
-## 3. Integrate into Your Page
+## 4. Integrate into Your Page
 
 ### Step 1: Add the script
 
@@ -142,11 +184,25 @@ Or copy `ai-widget.js` into your static files folder and reference it locally.
 
 ### Step 2: Initialize
 
+Standard mode (default):
+
 ```html
 <script>
   AIWidget.init({
-    server: 'ws://localhost:8000',          // Your WebSocket server URL
+    server: 'ws://localhost:8000',
     assistant: 'receptionist'
+  });
+</script>
+```
+
+Realtime mode (lower latency, requires `index-realtime.js` server):
+
+```html
+<script>
+  AIWidget.init({
+    server: 'ws://localhost:8000',
+    assistant: 'receptionist',
+    mode: 'realtime'
   });
 </script>
 ```
@@ -160,18 +216,19 @@ Done. A floating voice widget appears at the bottom-right of your page.
   AIWidget.init({
     server:    'ws://localhost:8000', // Required — WebSocket server URL
     assistant: 'receptionist',           // Optional — preset name (default: 'receptionist')
+    mode:      'standard',               // Optional — 'standard' or 'realtime' (default: 'standard')
     title:     'AI Receptionist',        // Optional — widget title
     subtitle:  'Talk to AI Receptionist',// Optional — idle state text
     position:  'bottom-right',           // Optional — 'bottom-right' or 'bottom-left'
-    style:     {},                       // Optional — CSS variable overrides (see section 5)
+    style:     {},                       // Optional — CSS variable overrides (see section 6)
   });
 </script>
 ```
 
-### Switch Preset at Runtime
+### Switch Preset or Mode at Runtime
 
 ```js
-AIWidget.setOptions({ assistant: 'sales' });
+AIWidget.setOptions({ assistant: 'sales', mode: 'realtime' });
 ```
 
 Takes effect on the next connection (click the orb to start a new conversation).
@@ -184,34 +241,24 @@ AIWidget.destroy();
 
 ---
 
-## 4. Adding a New Preset
+## 5. Adding a New Preset
 
-1. Open `server/index-openai.js`
-2. Add a new entry to `PRESETS`:
+1. Create a new JSON file in `server/presets/`, e.g. `server/presets/booking.json`:
 
-```js
-const PRESETS = {
-  // ...existing presets...
-
-  booking: {
-    instructions: `You are an AI booking assistant for a hotel.
-Help guests check availability, make reservations, and answer questions about amenities.
-Keep responses short and conversational.
-If the user says bye, say goodbye and use [endCall].`,
-    openingMessage: 'Welcome! Would you like to book a room or check availability?',
-    voiceName: 'alloy',
-  },
-};
+```json
+{
+  "instructions": "You are an AI booking assistant for a hotel.\nHelp guests check availability, make reservations, and answer questions about amenities.\nKeep responses short and conversational.\nIf the user says bye, say goodbye and use [endCall].",
+  "openingMessage": "Welcome! Would you like to book a room or check availability?",
+  "voiceName": "alloy"
+}
 ```
 
-3. Restart the server: `node index-openai.js`
-4. Use it from the client: `AIWidget.init({ server: '...', assistant: 'booking' })`
-
-If running as a service, restart it after changes. See `DEPLOYMENT.md` for details.
+2. Restart the server — the new preset is auto-discovered
+3. Use it from the client: `AIWidget.init({ server: '...', assistant: 'booking' })`
 
 ---
 
-## 5. Customizing the Widget Style
+## 6. Customizing the Widget Style
 
 The widget uses CSS custom properties (variables), so you can change its size, colors, and layout without editing `ai-widget.js`.
 
@@ -296,7 +343,7 @@ AIWidget.setStyle({
 
 ---
 
-## 6. Widget States
+## 7. Widget States
 
 | State | Orb | Status Text |
 |-------|-----|-------------|
@@ -309,10 +356,12 @@ Click the orb to start. Click again to hang up.
 
 ---
 
-## 7. How It Works
+## 8. How It Works
+
+### Standard Mode
 
 1. **User clicks the orb** — browser requests microphone permission
-2. **WebSocket connects** with `?assistant=receptionist` query param
+2. **WebSocket connects** with `?assistant=receptionist&mode=standard`
 3. **Server looks up the preset** and creates an assistant with that config
 4. **Server sends greeting** audio
 5. **Widget plays audio** and shows "AI is speaking..."
@@ -320,14 +369,28 @@ Click the orb to start. Click again to hang up.
 7. **User speaks** — browser-side VAD detects speech
 8. **Audio streams** to server as Float32Array chunks
 9. **User stops speaking** — VAD detects 800ms silence, sends EOS
-10. **Server transcribes** (Whisper) → generates response (GPT) → converts to speech (TTS)
+10. **Server transcribes** (Whisper) → generates response (GPT-4o) → converts to speech (TTS)
 11. **Response audio streams** back and plays
 12. **Cycle repeats** until user disconnects
 13. **User can interrupt** — speaking while the bot is talking cuts it off
 
+### Realtime Mode
+
+1. **User clicks the orb** — browser requests microphone permission
+2. **WebSocket connects** with `?assistant=receptionist&mode=realtime`
+3. **Server opens a session** with OpenAI Realtime API using the preset's instructions and voice
+4. **Server sends opening message** via the Realtime API
+5. **Audio streams continuously** from browser to server to OpenAI
+6. **Server-side VAD** (OpenAI) detects when the user starts and stops speaking
+7. **OpenAI generates response** as a streaming audio response (speech-to-speech)
+8. **Response audio streams** back through the server to the browser
+9. **Cycle repeats** — no explicit turn-taking needed, VAD handles it automatically
+10. **User can interrupt** — speaking while the bot is talking cancels the current response
+11. **End call detection** — if the assistant says goodbye with `[endCall]`, the server plays a beep and disconnects
+
 ---
 
-## 8. API Reference
+## 9. API Reference
 
 ### `AIWidget.init(options)`
 
@@ -336,15 +399,16 @@ Initialize and render the widget. Call once on page load.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `server` | string | — | WebSocket server URL (required) |
-| `assistant` | string | `'receptionist'` | Preset name defined in server's `PRESETS` |
+| `assistant` | string | `'receptionist'` | Preset name defined in server's presets |
+| `mode` | string | `'standard'` | `'standard'` or `'realtime'` |
 | `title` | string | `'AI Receptionist'` | Widget title text |
 | `subtitle` | string | `'Talk to AI Receptionist'` | Idle state status text |
 | `position` | string | `'bottom-right'` | `'bottom-right'` or `'bottom-left'` |
-| `style` | object | `null` | CSS variable overrides (see section 5) |
+| `style` | object | `null` | CSS variable overrides (see section 6) |
 
 ### `AIWidget.setOptions(options)`
 
-Update `server` or `assistant` at runtime. Takes effect on the next connection.
+Update `server`, `assistant`, or `mode` at runtime. Takes effect on the next connection.
 
 ### `AIWidget.setStyle(styleObj)`
 
@@ -356,7 +420,7 @@ Disconnect and remove the widget from the page.
 
 ---
 
-## 9. Production Deployment
+## 10. Production Deployment
 
 ### Server
 
@@ -365,7 +429,7 @@ Deploy `server/` to any Node.js host (Railway, Render, Fly.io, AWS, etc.):
 ```bash
 cd server
 npm install
-node index-openai.js
+node index-realtime.js
 ```
 
 Or use Docker:
@@ -373,6 +437,12 @@ Or use Docker:
 ```bash
 docker build -t ai-voice-server .
 docker run -p 8000:8000 -e OPENAI_API_KEY=sk-... ai-voice-server
+```
+
+**Important:** The preset JSON files in `server/presets/` are gitignored. After deploying code via git, copy the preset files to the server separately:
+
+```bash
+scp server/presets/*.json user@server:/path/to/server/presets/
 ```
 
 ### Frontend
@@ -386,7 +456,8 @@ docker run -p 8000:8000 -e OPENAI_API_KEY=sk-... ai-voice-server
 <script>
   AIWidget.init({
     server: 'wss://your-api-server.com/ws',
-    assistant: 'receptionist'
+    assistant: 'receptionist',
+    mode: 'realtime'
   });
 </script>
 ```
@@ -394,6 +465,7 @@ docker run -p 8000:8000 -e OPENAI_API_KEY=sk-... ai-voice-server
 ### Security
 
 - `OPENAI_API_KEY` stays on the server — never exposed to clients
-- Prompts stay on the server — clients only send a preset name
+- Prompts live in gitignored JSON files — never pushed to the repo
+- Clients only send a preset name, never the actual prompt
 - Unknown preset names fall back to the default (`receptionist`)
 - Consider adding origin checks and rate limiting in production
