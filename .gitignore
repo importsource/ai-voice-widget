@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.*
+
+# Preset config (contains sensitive prompt instructions)
+server/presets/*.json
+
+# Deployment docs (contains server credentials)
+DEPLOYMENT.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Old React app files in web/
+web/src/
+web/public/
+web/package.json
+web/package-lock.json
+web/tsconfig.json
+web/tailwind.config.js
+web/config-overrides.js
+web/README.md
+web/.gitignore
