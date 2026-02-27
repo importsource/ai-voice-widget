@@ -81,7 +81,7 @@ display:flex;align-items:center;justify-content:center;\
 transition:transform .15s;position:relative}\
 .aiw-orb:hover{transform:scale(1.06)}.aiw-orb:active{transform:scale(.97)}\
 .aiw-orb::before{content:"";position:absolute;inset:-4px;border-radius:50%;z-index:0}\
-.aiw-pill.aiw-collapsed .aiw-orb{\
+.aiw-pill.aiw-collapsed .aiw-orb:not(.active){\
 width:100%;height:100%;\
 background:radial-gradient(circle at 50% 38%,#3b2108 0%,#1a0e00 62%,#0b0500 100%) !important;\
 border:4px solid rgba(255,140,20,.95);\
@@ -89,14 +89,20 @@ box-shadow:0 0 28px rgba(255,140,20,.18),0 0 60px rgba(255,140,20,.10)}\
 .aiw-pill.aiw-collapsed .aiw-orb::before{\
 content:"";position:absolute;inset:0;border-radius:50%;z-index:0;\
 background:radial-gradient(circle at 50% 35%,rgba(255,140,20,.14) 0%,transparent 62%)}\
+.aiw-pill.aiw-collapsed .aiw-orb.active{\
+width:100%;height:100%;\
+background:radial-gradient(circle at 50% 35%,#ef4444 0%,#b91c1c 55%,#7f1d1d 100%) !important;\
+border:none;\
+box-shadow:0 0 0 10px rgba(220,38,38,.18),0 0 34px rgba(220,38,38,.22),0 0 70px rgba(220,38,38,.14)}\
 .aiw-pill.aiw-collapsed .aiw-ic svg{fill:rgba(255,140,20,.95);width:32px;height:32px}\
 .aiw-orb.idle{\
 background:var(--aiw-orb-idle,linear-gradient(145deg,#e88c14,#c06a08));\
 box-shadow:0 0 20px rgba(230,140,20,.3)}\
 .aiw-orb.idle::before{background:radial-gradient(circle,rgba(230,140,20,.25) 0%,transparent 70%)}\
-.aiw-orb.connecting{\
-background:var(--aiw-orb-think,var(--aiw-orb-idle,linear-gradient(145deg,#e88c14,#c06a08)));\
-box-shadow:0 0 20px rgba(230,140,20,.3)}\
+.aiw-orb.active{\
+background:var(--aiw-orb-listen,linear-gradient(145deg,#dc2626,#991b1b));\
+box-shadow:0 0 25px rgba(220,38,38,.35);animation:aiw-pr 1.2s ease-in-out infinite}\
+.aiw-orb.active::before{background:radial-gradient(circle,rgba(220,38,38,.2) 0%,transparent 70%)}\
 .aiw-orb.listening{\
 background:var(--aiw-orb-listen,linear-gradient(145deg,#dc2626,#991b1b));\
 box-shadow:0 0 25px rgba(220,38,38,.35);animation:aiw-pr 1.2s ease-in-out infinite}\
@@ -111,7 +117,7 @@ animation:aiw-po 1.5s ease-in-out infinite}\
 @keyframes aiw-po{0%,100%{box-shadow:0 0 15px rgba(230,140,20,.25)}50%{box-shadow:0 0 35px rgba(230,140,20,.5)}}\
 .aiw-ic{position:relative;z-index:1;display:flex;align-items:center;justify-content:center}\
 .aiw-ic svg{fill:#fff;width:20px;height:20px}\
-.aiw-ic-stop{width:16px;height:16px;background:#fff;border-radius:3px}\
+.aiw-ic-stop{width:18px;height:18px;background:#fff;border-radius:4px}\
 .aiw-ic-spin{width:22px;height:22px;border:2.5px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:aiw-sp .8s linear infinite}\
 @keyframes aiw-sp{to{transform:rotate(360deg)}}\
 .aiw-ic-wave{display:flex;align-items:center;gap:2px;height:20px}\
@@ -197,9 +203,10 @@ transition:opacity .2s ease}\
     }
   }
   function setState(s) {
-    orbBtn.className = 'aiw-orb ' + (s || 'idle');
+    var active = !!(s && s !== '');
+    orbBtn.className = 'aiw-orb ' + (active ? 'active' : 'idle');
     if (s === 'connecting') {
-      iconEl.innerHTML = SPIN_HTML;
+      iconEl.innerHTML = STOP_HTML;
       statusEl.className = 'aiw-status s-think';
       statusEl.textContent = 'Connecting...';
     } else if (s === 'listening') {
@@ -207,11 +214,11 @@ transition:opacity .2s ease}\
       statusEl.className = 'aiw-status s-listen';
       statusEl.innerHTML = '<span class="aiw-dot"></span> Listening... speak now';
     } else if (s === 'thinking') {
-      iconEl.innerHTML = SPIN_HTML;
+      iconEl.innerHTML = STOP_HTML;
       statusEl.className = 'aiw-status s-think';
       statusEl.textContent = 'AI is thinking...';
     } else if (s === 'speaking') {
-      iconEl.innerHTML = WAVE_HTML;
+      iconEl.innerHTML = STOP_HTML;
       statusEl.className = 'aiw-status s-speak';
       statusEl.textContent = 'AI is speaking...';
     } else {
