@@ -391,13 +391,13 @@ transition:opacity .2s ease}\
     chevBtn = document.getElementById('__aiw_chev');
 
     orbBtn.onclick = function() {
+      if (rec || ws) { hangup(false); return; }
       if (userCollapsed) {
         userCollapsed = false;
         applyLayout();
         return;
       }
-      if (rec || ws) { hangup(false); }
-      else { setState('connecting'); connect(); }
+      setState('connecting'); connect();
     };
     chevBtn.onclick = function() {
       userCollapsed = true;
