@@ -396,8 +396,8 @@ transition:opacity .2s ease}\
         applyLayout();
         return;
       }
-      if (!rec) { setState('connecting'); connect(); }
-      else hangup(false);
+      if (rec || ws) { hangup(false); }
+      else { setState('connecting'); connect(); }
     };
     chevBtn.onclick = function() {
       userCollapsed = true;
