@@ -121,10 +121,7 @@
 
     <label>Assistant Preset</label>
     <select id="cfgPreset">
-      <option value="receptionist">Receptionist — General inquiries & scheduling</option>
-      <option value="sales">Sales — Product guidance & purchasing</option>
-      <option value="support">Support — Technical troubleshooting</option>
-      <option value="telalive">TelAlive — AI Receptionist for Restaurants</option>
+      <option value="">Loading presets...</option>
     </select>
     <p class="hint">Presets are defined on the server — prompts stay hidden from clients</p>
 
@@ -147,21 +144,55 @@
     var applyBtn  = document.getElementById('applyBtn');
     var savedMsg  = document.getElementById('savedMsg');
 
-    AIWidget.init({
-      server:    cfgServer.value,
-      assistant: cfgPreset.value,
-      mode:      cfgMode.value,
-      title:     'AI Receptionist',
-      subtitle:  'Talk to AI Receptionist',
-      position:  'bottom-right'
-    });
+    function getHttpUrl(wsUrl) {
+      return wsUrl.replace(/^ws(s?):/, 'http$1:');
+    }
 
-    applyBtn.onclick = function() {
+    function loadPresets() {
+      var httpUrl = getHttpUrl(cfgServer.value.trim());
+      fetch(httpUrl + '/presets')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          cfgPreset.innerHTML = '';
+          data.presets.forEach(function(p) {
+            var opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.label + ' — ' + p.description;
+            cfgPreset.appendChild(opt);
+          });
+          if (data.default) cfgPreset.value = data.default;
+          applySettings();
+        })
+        .catch(function() {
+          cfgPreset.innerHTML = '<option value="">Failed to load presets</option>';
+        });
+    }
+
+    function applySettings() {
+      var selected = cfgPreset.options[cfgPreset.selectedIndex];
       AIWidget.setOptions({
         server:    cfgServer.value.trim(),
         assistant: cfgPreset.value,
-        mode:      cfgMode.value
+        mode:      cfgMode.value,
+        title:     selected ? selected.textContent.split(' — ')[0] : 'AI Assistant',
+        subtitle:  selected ? selected.textContent.split(' — ')[1] || '' : ''
       });
+    }
+
+    AIWidget.init({
+      server:    cfgServer.value,
+      assistant: 'default',
+      mode:      cfgMode.value,
+      title:     'AI Assistant',
+      subtitle:  'Loading...',
+      position:  'bottom-right'
+    });
+
+    loadPresets();
+    cfgServer.addEventListener('change', loadPresets);
+
+    applyBtn.onclick = function() {
+      applySettings();
       savedMsg.classList.add('show');
       setTimeout(function() { savedMsg.classList.remove('show'); }, 2000);
     };

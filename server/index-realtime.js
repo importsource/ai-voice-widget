@@ -1,14 +1,38 @@
 const dotenv = require("dotenv");
 dotenv.config();
 
+const http = require("http");
 const WebSocket = require("ws");
 const { RealtimeRelay } = require("./lib/realtime-relay");
 const { pcm16ToFloat32 } = require("./lib/audio");
 const { generateBeep } = require("./lib/audio");
-const { PRESETS, DEFAULT_PRESET } = require("./lib/presets");
+const { PRESETS, DEFAULT_PRESET, getPresetList } = require("./lib/presets");
 
 const PORT = 8000;
-const server = new WebSocket.Server({ port: PORT });
+
+// HTTP server handles /presets API and upgrades WS connections
+const httpServer = http.createServer((req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  if (req.url === "/presets" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ presets: getPresetList(), default: DEFAULT_PRESET }));
+    return;
+  }
+
+  res.writeHead(404);
+  res.end();
+});
+
+const server = new WebSocket.Server({ server: httpServer });
 
 // ====== Connection Handler ======
 
@@ -175,6 +199,9 @@ server.on("connection", async (browserWs, req) => {
   }
 });
 
-console.log("WebSocket server running on ws://localhost:" + PORT);
-console.log("Supports both standard and realtime modes (via ?mode=standard|realtime)");
-console.log("Available presets:", Object.keys(PRESETS).join(", "));
+httpServer.listen(PORT, () => {
+  console.log("Server running on http://localhost:" + PORT);
+  console.log("  GET /presets — list available presets");
+  console.log("  WS  /        — voice connection (?assistant=<name>&mode=standard|realtime)");
+  console.log("Available presets:", Object.keys(PRESETS).join(", "));
+});

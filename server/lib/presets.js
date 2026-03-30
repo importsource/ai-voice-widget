@@ -24,4 +24,12 @@ console.log(`Loaded ${files.length} preset(s): ${Object.keys(PRESETS).join(", ")
 
 const DEFAULT_PRESET = "receptionist";
 
-module.exports = { PRESETS, DEFAULT_PRESET };
+function getPresetList() {
+  return Object.entries(PRESETS).map(([id, preset]) => ({
+    id,
+    label: preset.label || id,
+    description: preset.description || "",
+  }));
+}
+
+module.exports = { PRESETS, DEFAULT_PRESET, getPresetList };

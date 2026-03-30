@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Widget Demo</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    h1 { font-size: 1.5rem; opacity: 0.5; }
+  </style>
+</head>
+<body>
+  <h1>AI Voice Widget Demo</h1>
+
+  <script src="ai-widget.js"></script>
+  <script>
+    // Fetch presets from server and initialize widget with a selector
+    fetch('http://localhost:8000/presets')
+      .then(r => r.json())
+      .then(data => {
+        const defaultPreset = data.default;
+        const presets = data.presets;
+
+        // Build a preset selector UI
+        const nav = document.createElement('div');
+        nav.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:10000;flex-wrap:wrap;justify-content:center;';
+
+        presets.forEach(p => {
+          const btn = document.createElement('button');
+          btn.textContent = p.label;
+          btn.title = p.description;
+          btn.style.cssText = 'padding:8px 16px;border-radius:20px;border:1px solid #555;background:#222;color:#eee;cursor:pointer;font-size:14px;';
+          btn.onclick = () => {
+            document.querySelectorAll('[data-preset-btn]').forEach(b => {
+              b.style.background = '#222';
+              b.style.borderColor = '#555';
+            });
+            btn.style.background = '#e88c14';
+            btn.style.borderColor = '#e88c14';
+            AIWidget.setOptions({ assistant: p.id, title: p.label, subtitle: p.description });
+          };
+          btn.setAttribute('data-preset-btn', '');
+          if (p.id === defaultPreset) {
+            btn.style.background = '#e88c14';
+            btn.style.borderColor = '#e88c14';
+          }
+          nav.appendChild(btn);
+        });
+
+        document.body.appendChild(nav);
+
+        // Init widget with default preset
+        const dp = presets.find(p => p.id === defaultPreset) || presets[0];
+        AIWidget.init({
+          server: 'ws://localhost:8000',
+          assistant: defaultPreset,
+          mode: 'standard',
+          title: dp.label,
+          subtitle: dp.description,
+        });
+      });
+  </script>
+</body>
+</html>
